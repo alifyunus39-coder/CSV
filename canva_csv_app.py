@@ -90,6 +90,19 @@ with tab_ai:
 
     api_key = st.text_input("🔑 Masukkan Gemini API Key", type="password", help="Aman: Kunci ini tidak akan disimpan di sistem, hanya di memori sementara browser.")
     
+    with st.expander("🛠️ Cek Status API Key (Troubleshooting)"):
+        if st.button("Cek Model Tersedia"):
+            if not api_key:
+                st.warning("Masukkan API key dulu.")
+            else:
+                try:
+                    genai.configure(api_key=api_key)
+                    models = [m.name for m in genai.list_models() if 'generateContent' in m.supported_generation_methods]
+                    st.success("Model yang tersedia untuk API Key Anda:")
+                    st.write(models)
+                except Exception as e:
+                    st.error(f"Gagal mengecek: {e}")
+                    
     uploaded_files = st.file_uploader(
         "Upload File (Image, Video, SVG)", 
         accept_multiple_files=True, 
@@ -105,8 +118,8 @@ with tab_ai:
             try:
                 # Inisialisasi Gemini
                 genai.configure(api_key=api_key)
-                # Siapkan beberapa kandidat model, dari yang terbaru hingga yang paling lama (sebagai fallback)
-                models_to_try = ['gemini-1.5-flash', 'gemini-1.5-flash-latest', 'gemini-pro-vision']
+                # Siapkan kandidat model generasi terbaru yang didukung oleh API Key Anda
+                models_to_try = ['gemini-2.5-flash', 'gemini-flash-latest', 'gemini-2.0-flash']
                 
                 ai_data = []
                 my_bar = st.progress(0, text="Mempersiapkan...")
@@ -117,13 +130,13 @@ with tab_ai:
                     try:
                         # Prompt sistem yang disuruh membalas dalam format JSON
                         prompt = f"""
-                        Kamu adalah ahli desain grafis Canva. Buatlah metadata untuk file dengan nama asli: "{file.name}".
-                        Tugasmu:
-                        1. Berikan "title" singkat (maksimal 3-6 kata) yang relevan dengan isi gambar/teks ini.
-                        2. Berikan "keywords" (5-12 kata kunci relevan) yang dipisahkan oleh tanda koma, cocok untuk pencarian Canva.
+                        You are a Canva graphic design expert. Create metadata for this file: "{file.name}".
+                        Your Task:
+                        1. Provide a short "title" (3-8 words maximum) relevant to the image/video content. MUST BE IN ENGLISH. The title should describe dominant colors first, then form/shape. Use natural readable sentence-style title.
+                        2. Provide "keywords" (Exactly 45-50 relevant keywords) separated by commas, suitable for Canva search. MUST BE IN ENGLISH.
                         
-                        Balas WAJIB dalam format JSON murni TANPA markdown block.
-                        Formatnya harus: {{"title": "Judul Disini", "keywords": "kata1, kata2, kata3"}}
+                        You MUST reply in pure JSON format WITHOUT any markdown blocks.
+                        The format must be exactly like this: {{"title": "Title Here", "keywords": "word1, word2, word3"}}
                         """
                         
                         response_text = ""
