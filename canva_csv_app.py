@@ -105,8 +105,8 @@ with tab_ai:
             try:
                 # Inisialisasi Gemini
                 genai.configure(api_key=api_key)
-                # Pakai gemini-1.5-flash-latest untuk memastikan versi terbaru dipakai
-                model = genai.GenerativeModel('gemini-1.5-flash-latest')
+                # Siapkan beberapa kandidat model, dari yang terbaru hingga yang paling lama (sebagai fallback)
+                models_to_try = ['gemini-1.5-flash', 'gemini-1.5-flash-latest', 'gemini-pro-vision']
                 
                 ai_data = []
                 my_bar = st.progress(0, text="Mempersiapkan...")
@@ -128,6 +128,17 @@ with tab_ai:
                         
                         response_text = ""
                         
+                        def try_generate(content):
+                            last_err = None
+                            for m_name in models_to_try:
+                                try:
+                                    model = genai.GenerativeModel(m_name)
+                                    resp = model.generate_content(content)
+                                    return resp.text
+                                except Exception as e:
+                                    last_err = e
+                            raise Exception(f"Semua model gagal (termasuk fallback). Error terakhir: {last_err}")
+                        
                         # -- PROSES GAMBAR --
                         if file_ext in ['png', 'jpg', 'jpeg', 'webp']:
                             img = Image.open(file)
@@ -135,8 +146,7 @@ with tab_ai:
                             # Ini akan mengubah gambar 3MB+ menjadi preview kecil hanya puluhan KB
                             img.thumbnail((512, 512))
                             
-                            response = model.generate_content([prompt, img])
-                            response_text = response.text
+                            response_text = try_generate([prompt, img])
                             
                         # -- PROSES VIDEO (Ekstrak 1 Frame) --
                         elif file_ext in ['mp4', 'mov', 'avi']:
@@ -153,8 +163,7 @@ with tab_ai:
                             if ret:
                                 frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
                                 img = Image.fromarray(frame_rgb)
-                                response = model.generate_content([prompt, img])
-                                response_text = response.text
+                                response_text = try_generate([prompt, img])
                             else:
                                 raise Exception("Gagal membaca frame video.")
                                 
@@ -163,8 +172,7 @@ with tab_ai:
                             svg_content = file.read().decode('utf-8')
                             # Batasi 5000 karakter agar token tidak meledak jika SVG rumit
                             prompt_svg = f"{prompt}\n\nBerikut adalah kodenya (visualisasikan bentuknya dari kode):\n{svg_content[:5000]}"
-                            response = model.generate_content(prompt_svg)
-                            response_text = response.text
+                            response_text = try_generate(prompt_svg)
                             
                         # Bersihkan balasan JSON
                         cleaned_json = response_text.replace("```json", "").replace("```", "").strip()
