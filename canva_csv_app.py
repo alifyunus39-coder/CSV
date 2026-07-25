@@ -105,8 +105,8 @@ with tab_ai:
             try:
                 # Inisialisasi Gemini
                 genai.configure(api_key=api_key)
-                # Pakai gemini-1.5-flash karena cepat, murah, dan support vision + text
-                model = genai.GenerativeModel('gemini-1.5-flash')
+                # Pakai gemini-1.5-flash-latest untuk memastikan versi terbaru dipakai
+                model = genai.GenerativeModel('gemini-1.5-flash-latest')
                 
                 ai_data = []
                 my_bar = st.progress(0, text="Mempersiapkan...")
@@ -131,6 +131,10 @@ with tab_ai:
                         # -- PROSES GAMBAR --
                         if file_ext in ['png', 'jpg', 'jpeg', 'webp']:
                             img = Image.open(file)
+                            # Perkecil gambar agar sangat ringan (maksimal 512x512 pixel)
+                            # Ini akan mengubah gambar 3MB+ menjadi preview kecil hanya puluhan KB
+                            img.thumbnail((512, 512))
+                            
                             response = model.generate_content([prompt, img])
                             response_text = response.text
                             
