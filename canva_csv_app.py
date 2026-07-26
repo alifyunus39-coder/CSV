@@ -16,6 +16,67 @@ except ImportError:
     AI_AVAILABLE = False
 
 # ==========================================
+# HELPER EXPORT MULTI-FORMAT
+# ==========================================
+def generate_csv_by_format(df_base, format_name):
+    """
+    df_base minimal memiliki kolom: filename, title, keywords
+    Fungsi ini akan mentransformasi ke format header masing-masing platform.
+    """
+    if format_name == "Canva":
+        df = df_base[['filename', 'title', 'keywords']].copy()
+        return df.to_csv(index=False)
+    
+    elif format_name == "Adobe Stock":
+        df = df_base[['filename', 'title', 'keywords']].copy()
+        df.columns = ['Filename', 'Title', 'Keywords']
+        return df.to_csv(index=False)
+        
+    elif format_name == "Shutterstock":
+        df = df_base[['filename', 'title', 'keywords']].copy()
+        df.columns = ['filename', 'Description', 'Keywords']
+        return df.to_csv(index=False)
+        
+    elif format_name == "Envato":
+        df = pd.DataFrame()
+        df['Filename*'] = df_base['filename']
+        df['Title*'] = df_base['title']
+        df['Description*'] = df_base['title']
+        df['Keywords*'] = df_base['keywords']
+        df['Category*'] = "Nature"
+        df['Price: Single Use License ($USD)*'] = "$12.00"
+        df['Price: Multi-use License ($USD)*'] = "$36.00"
+        df['Recognisable people?*'] = "N"
+        df['Recognisable buildings?*'] = "N"
+        df['Releases'] = ""
+        df['Is Motion Graphics?'] = ""
+        df['AudioJungle Track (IDs)'] = ""
+        df['Color'] = ""
+        df['Pace'] = ""
+        df['Movement'] = ""
+        df['Composition'] = ""
+        df['Setting'] = ""
+        df['No. of People'] = ""
+        df['Gender'] = ""
+        df['Age'] = ""
+        df['Ethnicity'] = ""
+        df['Alpha Channel'] = ""
+        df['Looped'] = ""
+        df['Source Audio'] = ""
+        return df.to_csv(index=False)
+        
+    elif format_name in ["iStock", "Pond5"]:
+        df = pd.DataFrame()
+        df['filename'] = df_base['filename']
+        df['title'] = df_base['title']
+        df['description'] = df_base['title']
+        return df.to_csv(index=False)
+        
+    else:
+        # Default fallback
+        return df_base.to_csv(index=False)
+
+# ==========================================
 # KONFIGURASI APLIKASI
 # ==========================================
 st.set_page_config(page_title="Canva CSV Fast", page_icon="⚡", layout="wide")
@@ -30,19 +91,37 @@ tab_manual, tab_ai = st.tabs(["📝 Mode Manual (Teks)", "🤖 Mode AI (Gemini V
 # ==========================================
 with tab_manual:
     st.subheader("Mode Manual (Ubah Daftar Teks)")
-    st.markdown("Ubah teks atau daftar nama file biasa menjadi format CSV Canva. Sangat cepat, tanpa AI.")
+    st.markdown("Ubah teks atau daftar nama file biasa menjadi format CSV Canva atau format microstock lainnya. Sangat cepat, tanpa AI.")
+    
+    export_formats = st.multiselect(
+        "Pilih Format Export CSV:",
+        options=["Canva", "Adobe Stock", "Shutterstock", "Envato", "iStock", "Pond5"],
+        default=["Canva"],
+        key="manual_formats"
+    )
     
     raw_text = st.text_area("Tempel teks atau daftar nama file di sini...", height=250, key="manual_input")
 
     if st.button("🚀 Proses Teks", type="primary", key="btn_manual"):
         if not raw_text.strip():
             st.warning("Teks masih kosong. Silakan tempel teks terlebih dahulu.")
+        elif not export_formats:
+            st.warning("Silakan pilih minimal 1 format export.")
         else:
             try:
                 # Deteksi jika sudah CSV
                 if "," in raw_text and len(raw_text.split('\n')) > 1:
-                    result_csv = raw_text
-                    st.success("✓ CSV Terdeteksi! (Data langsung diteruskan)")
+                    # Parse as CSV to build df_base
+                    df_base = pd.read_csv(io.StringIO(raw_text))
+                    # Ensure basic columns exist
+                    if 'filename' not in df_base.columns:
+                        df_base['filename'] = df_base.iloc[:, 0]
+                    if 'title' not in df_base.columns:
+                        df_base['title'] = df_base.iloc[:, 1] if len(df_base.columns) > 1 else df_base['filename']
+                    if 'keywords' not in df_base.columns:
+                        df_base['keywords'] = df_base.iloc[:, 2] if len(df_base.columns) > 2 else "canva, design"
+                    
+                    st.success("✓ CSV Terdeteksi! (Data diproses ulang untuk format yang dipilih)")
                 else:
                     lines = [line.strip() for line in raw_text.split('\n') if line.strip()]
                     
@@ -59,16 +138,22 @@ with tab_manual:
                             "keywords": keywords
                         })
                     
-                    df = pd.DataFrame(data)
-                    result_csv = df.to_csv(index=False)
-                    st.success("✓ Berhasil Konversi Teks menjadi CSV Canva!")
+                    df_base = pd.DataFrame(data)
+                    st.success("✓ Berhasil Konversi Teks!")
 
-                st.download_button(
-                    label="📥 Download CSV (Manual)",
-                    data=result_csv,
-                    file_name="canva_manual_upload.csv",
-                    mime="text/csv"
-                )
+                st.markdown("### 📥 Download Hasil")
+                cols = st.columns(min(len(export_formats), 4))
+                for i, fmt in enumerate(export_formats):
+                    csv_data = generate_csv_by_format(df_base, fmt)
+                    filename = f"{fmt.lower().replace(' ', '_')}_manual.csv"
+                    with cols[i % 4]:
+                        st.download_button(
+                            label=f"Unduh {fmt}",
+                            data=csv_data,
+                            file_name=filename,
+                            mime="text/csv",
+                            key=f"dl_manual_{fmt}"
+                        )
             except Exception as e:
                 st.error(f"Terjadi kesalahan saat memproses data: {e}")
 
@@ -103,6 +188,13 @@ with tab_ai:
                 except Exception as e:
                     st.error(f"Gagal mengecek: {e}")
                     
+    export_formats_ai = st.multiselect(
+        "Pilih Format Export CSV:",
+        options=["Canva", "Adobe Stock", "Shutterstock", "Envato", "iStock", "Pond5"],
+        default=["Canva"],
+        key="ai_formats"
+    )
+    
     uploaded_files = st.file_uploader(
         "Upload File (Image, Video, SVG)", 
         accept_multiple_files=True, 
@@ -114,6 +206,8 @@ with tab_ai:
             st.warning("Silakan masukkan Gemini API Key terlebih dahulu.")
         elif not uploaded_files:
             st.warning("Silakan upload minimal 1 file.")
+        elif not export_formats_ai:
+            st.warning("Silakan pilih minimal 1 format export.")
         else:
             try:
                 # Inisialisasi Gemini
@@ -224,13 +318,19 @@ with tab_ai:
                 df_ai = pd.DataFrame(ai_data)
                 st.dataframe(df_ai, use_container_width=True)
                 
-                csv_ai = df_ai.to_csv(index=False)
-                st.download_button(
-                    label="📥 Download CSV (Hasil AI)",
-                    data=csv_ai,
-                    file_name="canva_ai_upload.csv",
-                    mime="text/csv"
-                )
+                st.markdown("### 📥 Download Hasil AI")
+                cols = st.columns(min(len(export_formats_ai), 4))
+                for i, fmt in enumerate(export_formats_ai):
+                    csv_data = generate_csv_by_format(df_ai, fmt)
+                    filename = f"{fmt.lower().replace(' ', '_')}_ai.csv"
+                    with cols[i % 4]:
+                        st.download_button(
+                            label=f"Unduh {fmt}",
+                            data=csv_data,
+                            file_name=filename,
+                            mime="text/csv",
+                            key=f"dl_ai_{fmt}"
+                        )
                 
             except Exception as e:
                 st.error(f"Gagal melakukan koneksi AI: {e}. Periksa kembali API Key Anda.")
